@@ -20,7 +20,13 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Calendar;
 import java.util.stream.Collectors;
 
 /**
@@ -167,6 +173,165 @@ public class ItemController {
         }).collect(Collectors.toList());
         itemVOPage.setRecords(itemVOList);
         return ResultUtils.success(itemVOPage);
+    }
+
+    /**
+     * 获取统计信息
+     *
+     * @param request
+     * @return
+     */
+    @GetMapping("/statistics")
+    public BaseResponse<Map<String, Object>> getStatistics(HttpServletRequest request) {
+        Calendar calendar = Calendar.getInstance();
+        
+        // 获取今年的开始时间
+        calendar.set(Calendar.DAY_OF_YEAR, 1);
+        calendar.set(Calendar.HOUR_OF_DAY, 0);
+        calendar.set(Calendar.MINUTE, 0);
+        calendar.set(Calendar.SECOND, 0);
+        calendar.set(Calendar.MILLISECOND, 0);
+        Date startOfYear = calendar.getTime();
+        
+        // 获取去年的开始和结束时间
+        calendar.add(Calendar.YEAR, -1);
+        Date startOfLastYear = calendar.getTime();
+        calendar.add(Calendar.YEAR, 1);
+        calendar.add(Calendar.MILLISECOND, -1);
+        Date endOfLastYear = calendar.getTime();
+
+        // 获取全部支出
+        BigDecimal totalExpense = itemService.lambdaQuery()
+                .select(Item::getTotalPrice)
+                .list()
+                .stream()
+                .map(Item::getTotalPrice)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // 获取本年支出
+        BigDecimal yearExpense = itemService.lambdaQuery()
+                .select(Item::getTotalPrice)
+                .ge(Item::getPurchaseTime, startOfYear)
+                .list()
+                .stream()
+                .map(Item::getTotalPrice)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // 获取去年支出
+        BigDecimal lastYearExpense = itemService.lambdaQuery()
+                .select(Item::getTotalPrice)
+                .ge(Item::getPurchaseTime, startOfLastYear)
+                .lt(Item::getPurchaseTime, startOfYear)
+                .list()
+                .stream()
+                .map(Item::getTotalPrice)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // 获取去年总支出
+        BigDecimal lastTotalExpense = itemService.lambdaQuery()
+                .select(Item::getTotalPrice)
+                .lt(Item::getPurchaseTime, startOfYear)
+                .list()
+                .stream()
+                .map(Item::getTotalPrice)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // 获取最喜欢的IP及其数量
+        List<Item> items = itemService.list();
+        Map<String, Long> ipCountMap = items.stream()
+                .collect(Collectors.groupingBy(Item::getItemIp, Collectors.counting()));
+        
+        String favoriteIp = "";
+        Long maxCount = 0L;
+        for (Map.Entry<String, Long> entry : ipCountMap.entrySet()) {
+            if (entry.getValue() > maxCount) {
+                maxCount = entry.getValue();
+                favoriteIp = entry.getKey();
+            }
+        }
+
+        // 构造返回结果
+        Map<String, Object> result = new HashMap<>();
+        result.put("totalExpense", totalExpense);
+        result.put("yearExpense", yearExpense);
+        result.put("lastYearExpense", lastYearExpense);
+        result.put("lastTotalExpense", lastTotalExpense);
+        result.put("favoriteIp", favoriteIp);
+        result.put("favoriteIpCount", maxCount);
+
+        return ResultUtils.success(result);
+    }
+
+    /**
+     * 获取每月统计信息
+     *
+     * @param year 指定年份
+     * @param request
+     * @return
+     */
+    @GetMapping("/monthlyStatistics")
+    public BaseResponse<List<Map<String, Object>>> getMonthlyStatistics(
+            @RequestParam(required = false) Integer year, HttpServletRequest request) {
+        Calendar calendar = Calendar.getInstance();
+        
+        // 如果没有指定年份，默认使用当前年份
+        if (year == null) {
+            year = calendar.get(Calendar.YEAR);
+        }
+        
+        // 设置查询开始时间为指定年份的1月1日
+        calendar.set(Calendar.YEAR, year);
+        calendar.set(Calendar.MONTH, Calendar.JANUARY);
+        calendar.set(Calendar.DAY_OF_MONTH, 1);
+        calendar.set(Calendar.HOUR_OF_DAY, 0);
+        calendar.set(Calendar.MINUTE, 0);
+        calendar.set(Calendar.SECOND, 0);
+        calendar.set(Calendar.MILLISECOND, 0);
+        Date startOfYear = calendar.getTime();
+        
+        // 设置查询结束时间为指定年份的12月31日
+        calendar.set(Calendar.MONTH, Calendar.DECEMBER);
+        calendar.set(Calendar.DAY_OF_MONTH, 31);
+        calendar.set(Calendar.HOUR_OF_DAY, 23);
+        calendar.set(Calendar.MINUTE, 59);
+        calendar.set(Calendar.SECOND, 59);
+        calendar.set(Calendar.MILLISECOND, 999);
+        Date endOfYear = calendar.getTime();
+        
+        // 获取指定年份的所有物品数据
+        List<Item> items = itemService.lambdaQuery()
+                .ge(Item::getPurchaseTime, startOfYear)
+                .le(Item::getPurchaseTime, endOfYear)
+                .list();
+        
+        // 按月份分组计算每月总支出
+        Map<Integer, BigDecimal> monthlyExpenseMap = new HashMap<>();
+        
+        // 初始化12个月的数据
+        for (int i = 1; i <= 12; i++) {
+            monthlyExpenseMap.put(i, BigDecimal.ZERO);
+        }
+        
+        // 计算每月支出
+        for (Item item : items) {
+            Calendar itemCalendar = Calendar.getInstance();
+            itemCalendar.setTime(item.getPurchaseTime());
+            int month = itemCalendar.get(Calendar.MONTH) + 1; // Calendar.MONTH 从0开始，所以需要+1
+            
+            BigDecimal currentExpense = monthlyExpenseMap.get(month);
+            monthlyExpenseMap.put(month, currentExpense.add(item.getTotalPrice()));
+        }
+        
+        // 构造返回结果
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (int i = 1; i <= 12; i++) {
+            Map<String, Object> monthData = new HashMap<>();
+            monthData.put("month", i + "月");
+            monthData.put("expense", monthlyExpenseMap.get(i));
+            result.add(monthData);
+        }
+        
+        return ResultUtils.success(result);
     }
 
     // endregion
