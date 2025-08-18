@@ -65,6 +65,11 @@ public class ItemVO {
     private Date updateTime;
 
     /**
+     * 描述信息
+     */
+    private String description;
+
+    /**
      * 从Item实体类转换为ItemVO
      *
      * @param item
@@ -86,6 +91,7 @@ public class ItemVO {
         itemVO.setPurchaseTime(item.getPurchaseTime());
         itemVO.setCreateTime(item.getCreateTime());
         itemVO.setUpdateTime(item.getUpdateTime());
+        itemVO.setDescription(item.getDescription());
         return itemVO;
     }
 }
