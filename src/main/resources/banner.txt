@@ -1,1 +1,3 @@
-我的项目 by 程序员鱼皮 https://github.com/liyupi
+author: Octaver https://github.com/Octaver2131
+tutor: Yupi https://github.com/liyupi
+from: https://yupi.icu
