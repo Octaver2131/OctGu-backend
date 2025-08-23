@@ -1,8 +1,8 @@
 -- 创建库
-create database if not exists my_db;
+create database if not exists octgu;
 
 -- 切换库
-use my_db;
+use octgu;
 
 -- 用户表
 create table if not exists user
@@ -43,3 +43,22 @@ create table if not exists post
     updateTime    datetime default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
     isDelete      tinyint  default 0                 not null comment '是否删除'
 ) comment '帖子';
+
+create table if not exists item
+(
+    id             int auto_increment comment '自增主键，唯一标识每条记录'
+        primary key,
+    itemName       varchar(100)                       not null comment 'item名字（如周边商品名称）',
+    itemIp         varchar(200)                       not null comment 'item对应的二次元IP名称（如动漫、游戏、影视作品名）',
+    itemCategory   varchar(50)                        not null comment 'item种类（如徽章、手办、立牌等）',
+    unitPrice      decimal(10, 2)                     not null comment '单价（保留2位小数）',
+    totalPrice     decimal(12, 2)                     not null comment '总价（保留2位小数）',
+    purchaseNumber int                                not null comment '购买数量（非负整数）',
+    purchaseTime   date                               not null comment '购买时间（仅到日，格式：YYYY-MM-DD）',
+    createTime     datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    updateTime     datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    isDelete       tinyint  default 0                 not null comment '是否删除',
+    description    varchar(255)                       null,
+    check (`purchaseNumber` >= 0)
+)
+    comment '二次元IP周边商品购买信息表（购买时间精确到日）' engine = InnoDB;
