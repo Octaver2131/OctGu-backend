@@ -61,6 +61,11 @@ public class Item implements Serializable {
     private Date purchaseTime;
 
     /**
+     * 创建用户 id
+     */
+    private Long userId;
+
+    /**
      * 创建时间
      */
     private Date createTime;

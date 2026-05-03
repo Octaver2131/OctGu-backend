@@ -13,6 +13,7 @@
             <result property="totalPrice" column="totalPrice" />
             <result property="purchaseNumber" column="purchaseNumber" />
             <result property="purchaseTime" column="purchaseTime" />
+            <result property="userId" column="userId" />
             <result property="createTime" column="createTime" />
             <result property="updateTime" column="updateTime" />
             <result property="isDelete" column="isDelete" />
@@ -21,6 +22,6 @@
 
     <sql id="Base_Column_List">
         id,itemName,itemIp,itemCategory,unitPrice,totalPrice,
-        purchaseNumber,purchaseTime,createTime,updateTime,isDelete
+        purchaseNumber,purchaseTime,userId,createTime,updateTime,isDelete,description
     </sql>
 </mapper>

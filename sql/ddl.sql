@@ -55,8 +55,9 @@ create table if not exists item
     totalPrice     decimal(12, 2)                     not null comment '总价（保留2位小数）',
     purchaseNumber int                                not null comment '购买数量（非负整数）',
     purchaseTime   date                               not null comment '购买时间（仅到日，格式：YYYY-MM-DD）',
+    userId         bigint                             not null comment '创建用户 id',
     createTime     datetime default CURRENT_TIMESTAMP not null comment '创建时间',
-    updateTime     datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    updateTime     datetime default CURRENT_TIMESTAMP not null comment '更新时间',
     isDelete       tinyint  default 0                 not null comment '是否删除',
     description    varchar(255)                       null,
     check (`purchaseNumber` >= 0)

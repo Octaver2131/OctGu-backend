@@ -12,8 +12,10 @@ import com.yupi.project.model.dto.item.ItemAddRequest;
 import com.yupi.project.model.dto.item.ItemQueryRequest;
 import com.yupi.project.model.dto.item.ItemUpdateRequest;
 import com.yupi.project.model.entity.Item;
+import com.yupi.project.model.entity.User;
 import com.yupi.project.model.vo.ItemVO;
 import com.yupi.project.service.ItemService;
+import com.yupi.project.service.UserService;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.*;
@@ -41,6 +43,9 @@ public class ItemController {
     @Resource
     private ItemService itemService;
 
+    @Resource
+    private UserService userService;
+
     // region 增删改查
 
     /**
@@ -59,6 +64,9 @@ public class ItemController {
         BeanUtils.copyProperties(itemAddRequest, item);
         // 校验
         itemService.validItem(item, true);
+        // 设置创建用户ID
+        User loginUser = userService.getLoginUser(request);
+        item.setUserId(loginUser.getId());
         boolean result = itemService.save(item);
         if (!result) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR);
@@ -78,6 +86,14 @@ public class ItemController {
         if (deleteRequest == null || deleteRequest.getId() <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
+        User loginUser = userService.getLoginUser(request);
+        Item item = itemService.getById(deleteRequest.getId());
+        if (item == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
+        }
+        if (!item.getUserId().equals(loginUser.getId())) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
+        }
         boolean b = itemService.removeById(deleteRequest.getId());
         return ResultUtils.success(b);
     }
@@ -93,6 +109,14 @@ public class ItemController {
     public BaseResponse<Boolean> updateItem(@RequestBody ItemUpdateRequest itemUpdateRequest, HttpServletRequest request) {
         if (itemUpdateRequest == null || itemUpdateRequest.getId() == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        User loginUser = userService.getLoginUser(request);
+        Item oldItem = itemService.getById(itemUpdateRequest.getId());
+        if (oldItem == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
+        }
+        if (!oldItem.getUserId().equals(loginUser.getId())) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
         Item item = new Item();
         BeanUtils.copyProperties(itemUpdateRequest, item);
@@ -114,9 +138,13 @@ public class ItemController {
         if (id <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
+        User loginUser = userService.getLoginUser(request);
         Item item = itemService.getById(id);
         if (item == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
+        }
+        if (!item.getUserId().equals(loginUser.getId())) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
         ItemVO itemVO = new ItemVO();
         BeanUtils.copyProperties(item, itemVO);
@@ -132,10 +160,12 @@ public class ItemController {
      */
     @GetMapping("/list")
     public BaseResponse<List<ItemVO>> listItems(ItemQueryRequest itemQueryRequest, HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
         Item itemQuery = new Item();
         if (itemQueryRequest != null) {
             BeanUtils.copyProperties(itemQueryRequest, itemQuery);
         }
+        itemQuery.setUserId(loginUser.getId());
         QueryWrapper<Item> queryWrapper = new QueryWrapper<>(itemQuery);
         List<Item> itemList = itemService.list(queryWrapper);
         List<ItemVO> itemVOList = itemList.stream().map(item -> {
@@ -157,12 +187,14 @@ public class ItemController {
     public BaseResponse<Page<ItemVO>> listItemByPage(ItemQueryRequest itemQueryRequest, HttpServletRequest request) {
         long current = 1;
         long size = 10;
+        User loginUser = userService.getLoginUser(request);
         Item itemQuery = new Item();
         if (itemQueryRequest != null) {
             BeanUtils.copyProperties(itemQueryRequest, itemQuery);
             current = itemQueryRequest.getCurrent();
             size = itemQueryRequest.getPageSize();
         }
+        itemQuery.setUserId(loginUser.getId());
         QueryWrapper<Item> queryWrapper = new QueryWrapper<>(itemQuery);
         Page<Item> itemPage = itemService.page(new Page<>(current, size), queryWrapper);
         Page<ItemVO> itemVOPage = new PageDTO<>(itemPage.getCurrent(), itemPage.getSize(), itemPage.getTotal());
@@ -183,6 +215,7 @@ public class ItemController {
      */
     @GetMapping("/statistics")
     public BaseResponse<Map<String, Object>> getStatistics(HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
         Calendar calendar = Calendar.getInstance();
         
         // 获取今年的开始时间
@@ -202,6 +235,7 @@ public class ItemController {
 
         // 获取全部支出
         BigDecimal totalExpense = itemService.lambdaQuery()
+                .eq(Item::getUserId, loginUser.getId())
                 .select(Item::getTotalPrice)
                 .list()
                 .stream()
@@ -210,6 +244,7 @@ public class ItemController {
 
         // 获取本年支出
         BigDecimal yearExpense = itemService.lambdaQuery()
+                .eq(Item::getUserId, loginUser.getId())
                 .select(Item::getTotalPrice)
                 .ge(Item::getPurchaseTime, startOfYear)
                 .list()
@@ -219,6 +254,7 @@ public class ItemController {
 
         // 获取去年支出
         BigDecimal lastYearExpense = itemService.lambdaQuery()
+                .eq(Item::getUserId, loginUser.getId())
                 .select(Item::getTotalPrice)
                 .ge(Item::getPurchaseTime, startOfLastYear)
                 .lt(Item::getPurchaseTime, startOfYear)
@@ -229,6 +265,7 @@ public class ItemController {
 
         // 获取去年总支出
         BigDecimal lastTotalExpense = itemService.lambdaQuery()
+                .eq(Item::getUserId, loginUser.getId())
                 .select(Item::getTotalPrice)
                 .lt(Item::getPurchaseTime, startOfYear)
                 .list()
@@ -237,7 +274,9 @@ public class ItemController {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 获取最喜欢的IP及其数量
-        List<Item> items = itemService.list();
+        List<Item> items = itemService.lambdaQuery()
+                .eq(Item::getUserId, loginUser.getId())
+                .list();
         Map<String, Long> ipCountMap = items.stream()
                 .collect(Collectors.groupingBy(Item::getItemIp, Collectors.counting()));
         
@@ -272,6 +311,7 @@ public class ItemController {
     @GetMapping("/monthlyStatistics")
     public BaseResponse<List<Map<String, Object>>> getMonthlyStatistics(
             @RequestParam(required = false) Integer year, HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
         Calendar calendar = Calendar.getInstance();
         
         // 如果没有指定年份，默认使用当前年份
@@ -300,6 +340,7 @@ public class ItemController {
         
         // 获取指定年份的所有物品数据
         List<Item> items = itemService.lambdaQuery()
+                .eq(Item::getUserId, loginUser.getId())
                 .ge(Item::getPurchaseTime, startOfYear)
                 .le(Item::getPurchaseTime, endOfYear)
                 .list();
